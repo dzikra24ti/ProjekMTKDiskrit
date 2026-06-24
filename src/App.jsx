@@ -2,35 +2,21 @@ import React, { useState, useMemo, useRef } from 'react';
 
 export default function App() {
   // =========================================================================
-  // STATE INPUT JARINGAN (BISA DIUBAH SECARA DINAMIS OLEH USER)
+  // STATE INPUT JARINGAN (KOSONG DARI AWAL - DIINPUTKAN OLEH USER)
   // =========================================================================
-  const [perangkat, setPerangkat] = useState({
-    'Server_Utama': { tipe: 'Server', x: 250, y: 60 },
-    'Router_Inti': { tipe: 'Router', x: 250, y: 160 },
-    'PC_Lab_A': { tipe: 'Komputer', x: 100, y: 280 },
-    'PC_Lab_B': { tipe: 'Komputer', x: 400, y: 280 },
-    'Printer_Shared': { tipe: 'Printer', x: 250, y: 380 }
-  });
-
-  const [koneksi, setKoneksi] = useState([
-    { id: 'e1', dari: 'Server_Utama', ke: 'Router_Inti', bobot: 2 },
-    { id: 'e2', dari: 'Router_Inti', ke: 'PC_Lab_A', bobot: 10 },
-    { id: 'e3', dari: 'Router_Inti', ke: 'PC_Lab_B', bobot: 15 },
-    { id: 'e4', dari: 'PC_Lab_A', ke: 'PC_Lab_B', bobot: 5 },
-    { id: 'e5', dari: 'PC_Lab_A', ke: 'Printer_Shared', bobot: 8 },
-    { id: 'e6', dari: 'PC_Lab_B', ke: 'Printer_Shared', bobot: 12 }
-  ]);
+  const [perangkat, setPerangkat] = useState({});
+  const [koneksi, setKoneksi] = useState([]);
 
   // State Kontrol Form
   const [namaPerangkatBaru, setNamaPerangkatBaru] = useState('');
   const [tipePerangkatBaru, setTipePerangkatBaru] = useState('Komputer');
-  const [dariNode, setDariNode] = useState('Server_Utama');
-  const [keNode, setKeNode] = useState('Router_Inti');
+  const [dariNode, setDariNode] = useState('');
+  const [keNode, setKeNode] = useState('');
   const [bobotInput, setBobotInput] = useState(5);
 
   // State Pilihan Jalur Evaluasi
-  const [titikAwal, setTitikAwal] = useState('Server_Utama');
-  const [titikTujuan, setTitikTujuan] = useState('Printer_Shared');
+  const [titikAwal, setTitikAwal] = useState('');
+  const [titikTujuan, setTitikTujuan] = useState('');
 
   // State untuk Fitur Drag & Drop Simpul
   const [simpulAktif, setSimpulAktif] = useState(null);
@@ -70,7 +56,6 @@ export default function App() {
   // =========================================================================
   const handleTambahPerangkat = (e) => {
     e.preventDefault();
-    // Sanitasi: Hanya izinkan huruf, angka, dan underscore. Hapus simbol berbahaya.
     const namaBersih = namaPerangkatBaru.trim().replace(/[^a-zA-Z0-9_]/g, '');
     
     if (!namaBersih) {
@@ -83,28 +68,47 @@ export default function App() {
       return;
     }
 
-    setPerangkat(prev => ({
-      ...prev,
-      [namaBersih]: { tipe: tipePerangkatBaru, x: 250, y: 220 }
-    }));
+    setPerangkat(prev => {
+      const updated = {
+        ...prev,
+        [namaBersih]: { tipe: tipePerangkatBaru, x: 250, y: 220 }
+      };
+      
+      // Sinkronisasi otomatis dropdown jika ini adalah perangkat pertama/kedua
+      const keys = Object.keys(updated);
+      if (keys.length === 1) {
+        setDariNode(keys[0]);
+        setKeNode(keys[0]);
+        setTitikAwal(keys[0]);
+        setTitikTujuan(keys[0]);
+      } else if (keys.length === 2) {
+        setKeNode(keys[1]);
+        setTitikTujuan(keys[1]);
+      }
+      
+      return updated;
+    });
     setNamaPerangkatBaru('');
   };
 
   const handleTambahKoneksi = (e) => {
     e.preventDefault();
+    if (!dariNode || !keNode) {
+      alert("Validasi Jalur: Harap buat perangkat terlebih dahulu sebelum menyambungkan kabel!");
+      return;
+    }
+
     if (dariNode === keNode) {
       alert("Validasi Jalur: Perangkat asal dan tujuan tidak boleh sama (Looping Tunggal dilarang)!");
       return;
     }
     
-    // Keamanan: Pastikan bobot merupakan bilangan bulat positif (> 0)
     const bobotAman = Math.round(Number(bobotInput));
     if (isNaN(bobotAman) || bobotAman <= 0) {
       alert("Keamanan Algoritma: Bobot latensi harus berupa angka bulat positif (minimal 1 ms) untuk mencegah galat Dijkstra!");
       return;
     }
     
-    // Validasi Duplikasi Dua Arah: Cek rute bolak-balik agar tidak merusak representasi matriks
     const sudahAda = koneksi.some(k => 
       (k.dari === dariNode && k.ke === keNode) || (k.dari === keNode && k.ke === dariNode)
     );
@@ -174,7 +178,9 @@ export default function App() {
   }, [simpulList, daftarKetetanggaan]);
 
   const dijkstra = useMemo(() => {
-    if (!perangkat[titikAwal] || !perangkat[titikTujuan]) return { jalur: [], totalBobot: '∞' };
+    if (!titikAwal || !titikTujuan || !perangkat[titikAwal] || !perangkat[titikTujuan] || titikAwal === titikTujuan) {
+      return { jalur: [], totalBobot: '∞' };
+    }
     let jarak = {};
     let kembali = {};
     let antrean = [];
@@ -209,11 +215,11 @@ export default function App() {
       rute.unshift(saatIni);
       saatIni = kembali[saatIni];
     }
-    return { jalur: rute, totalBobot: jarak[titikTujuan] };
+    return { jalur: rute, totalBobot: jarak[titikTujuan] === Infinity ? '∞' : jarak[titikTujuan] };
   }, [simpulList, daftarKetetanggaan, titikAwal, titikTujuan, perangkat]);
 
   const mst = useMemo(() => {
-    if (simpulList.length === 0) return { sisiMST: [], totalBobotMST: 0 };
+    if (simpulList.length === 0 || koneksi.length === 0) return { sisiMST: [], totalBobotMST: 0 };
     let mstSisi = [];
     let dikunjungi = new Set([simpulList[0]]);
     let totalBobotMST = 0;
@@ -237,10 +243,10 @@ export default function App() {
       dikunjungi.add(minimum.v);
     }
     return { sisiMST: mstSisi, totalBobotMST };
-  }, [simpulList, daftarKetetanggaan]);
+  }, [simpulList, daftarKetetanggaan, koneksi]);
 
   const jumlahJalurAlternatif = useMemo(() => {
-    if (!daftarKetetanggaan[titikAwal] || !daftarKetetanggaan[titikTujuan]) return 0;
+    if (!titikAwal || !titikTujuan || !daftarKetetanggaan[titikAwal] || !daftarKetetanggaan[titikTujuan] || titikAwal === titikTujuan) return 0;
     const hitungJalur = (start, target, visited) => {
       if (start === target) return 1;
       visited.add(start);
@@ -270,7 +276,7 @@ export default function App() {
           <form onSubmit={handleTambahPerangkat} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <strong style={{ fontSize: '14px' }}>1. Tambah Perangkat Baru (Simpul)</strong>
             <input 
-              type="text" placeholder="Contoh: PC_Baru" value={namaPerangkatBaru} 
+              type="text" placeholder="Contoh: Server_Pusat" value={namaPerangkatBaru} 
               onChange={(e) => setNamaPerangkatBaru(e.target.value)}
               style={{ padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e0' }}
             />
@@ -288,9 +294,11 @@ export default function App() {
             <strong style={{ fontSize: '14px' }}>2. Sambung Kabel Jaringan (Sisi & Bobot)</strong>
             <div style={{ display: 'flex', gap: '5px' }}>
               <select value={dariNode} onChange={(e) => setDariNode(e.target.value)} style={{ width: '50%', padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e0' }}>
+                {simpulList.length === 0 && <option value="">(Buat Perangkat Dulu)</option>}
                 {simpulList.map(node => <option key={node} value={node}>{node}</option>)}
               </select>
               <select value={keNode} onChange={(e) => setKeNode(e.target.value)} style={{ width: '50%', padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e0' }}>
+                {simpulList.length === 0 && <option value="">(Buat Perangkat Dulu)</option>}
                 {simpulList.map(node => <option key={node} value={node}>{node}</option>)}
               </select>
             </div>
@@ -307,10 +315,12 @@ export default function App() {
             <strong style={{ fontSize: '14px' }}>3. Evaluasi Aliran Distribusi</strong>
             <label style={{ fontSize: '12px' }}>Titik Asal:</label>
             <select value={titikAwal} onChange={(e) => setTitikAwal(e.target.value)} style={{ padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e0' }}>
+              {simpulList.length === 0 && <option value="">(Belum ada simpul)</option>}
               {simpulList.map(node => <option key={node} value={node}>{node}</option>)}
             </select>
             <label style={{ fontSize: '12px' }}>Titik Tujuan:</label>
             <select value={titikTujuan} onChange={(e) => setTitikTujuan(e.target.value)} style={{ padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e0' }}>
+              {simpulList.length === 0 && <option value="">(Belum ada simpul)</option>}
               {simpulList.map(node => <option key={node} value={node}>{node}</option>)}
             </select>
           </div>
@@ -323,7 +333,7 @@ export default function App() {
           <div style={{ flex: '1 1 500px' }}>
             <h3 style={{ color: '#2c5282', marginTop: '0' }}>Output: Kanvas Topologi Graf Interaktif</h3>
             <p style={{ fontSize: '12px', color: '#718096', marginTop: '-10px' }}>
-              💡 <em>Petunjuk: Silakan klik dan geser (drag) lingkaran perangkat untuk menata posisi graf agar rapi.</em>
+              💡 <em>Petunjuk: Perangkat baru akan muncul di tengah kanvas. Silakan drag lingkaran untuk mengatur posisi graf.</em>
             </p>
             <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px', backgroundColor: '#fafafa' }}>
               <svg 
@@ -335,6 +345,12 @@ export default function App() {
                 onMouseLeave={handleMouseUpOrLeave}
                 style={{ cursor: simpulAktif ? 'grabbing' : 'default' }}
               >
+                {simpulList.length === 0 && (
+                  <text x="50%" y="50%" textAnchor="middle" fill="#a0aec0" fontWeight="bold" fontSize="14">
+                    Kanvas Kosong. Silakan tambah perangkat pada form di atas!
+                  </text>
+                )}
+
                 {/* Gambar Kabel/Sisi */}
                 {koneksi.map((k, indeks) => {
                   const p1 = perangkat[k.dari];
@@ -386,13 +402,13 @@ export default function App() {
                 <div style={{ backgroundColor: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                   <h5 style={{ margin: '0 0 5px 0', color: '#4a5568' }}>Matriks Ketetanggaan (Adjacency)</h5>
                   <div style={{ fontFamily: 'monospace', fontSize: '11px', lineHeight: '1.5', whiteSpace: 'nowrap', overflowX: 'auto' }}>
-                    {matriksKetetanggaan.map((baris, i) => <div key={i}>[ {baris.join(', ')} ]</div>)}
+                    {simpulList.length === 0 ? '[ Matriks Kosong ]' : matriksKetetanggaan.map((baris, i) => <div key={i}>[ {baris.join(', ')} ]</div>)}
                   </div>
                 </div>
                 <div style={{ backgroundColor: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                   <h5 style={{ margin: '0 0 5px 0', color: '#4a5568' }}>Matriks Bersisian (Incidence)</h5>
                   <div style={{ fontFamily: 'monospace', fontSize: '11px', lineHeight: '1.5', whiteSpace: 'nowrap', overflowX: 'auto' }}>
-                    {matriksBersisian.map((baris, i) => <div key={i}>[ {baris.join(', ')} ]</div>)}
+                    {simpulList.length === 0 || koneksi.length === 0 ? '[ Matriks Kosong ]' : matriksBersisian.map((baris, i) => <div key={i}>[ {baris.join(', ')} ]</div>)}
                   </div>
                 </div>
               </div>
@@ -410,11 +426,16 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
+                  {simpulList.length === 0 && (
+                    <tr>
+                      <td colSpan="3" style={{ padding: '10px', textAlign: 'center', color: '#a0aec0' }}>Belum ada data perangkat.</td>
+                    </tr>
+                  )}
                   {Object.entries(perangkat).map(([nama, pt]) => (
                     <tr key={nama} style={{ borderBottom: '1px solid #edf2f7' }}>
                       <td style={{ padding: '6px', fontWeight: 'bold' }}>{nama}</td>
                       <td style={{ padding: '6px' }}>{pt.tipe}</td>
-                      <td style={{ padding: '6px' }}>{derajatSimpul[nama]} Jalur Aktif</td>
+                      <td style={{ padding: '6px' }}>{derajatSimpul[nama] || 0} Jalur Aktif</td>
                     </tr>
                   ))}
                 </tbody>
@@ -426,7 +447,7 @@ export default function App() {
               <h3 style={{ color: '#2c5282', margin: '0 0 10px 0' }}>Analisis Relasi Jalur & Efisiensi</h3>
               <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
                 <div>Lintasan Terpendek Terpilih (Dijkstra): <strong style={{ color: '#e53e3e' }}>{dijkstra.jalur.length > 1 ? dijkstra.jalur.join(' ➔ ') : 'Tidak Terhubung'}</strong></div>
-                <div>Total Latensi Distribusi: <strong>{dijkstra.totalBobot} ms</strong></div>
+                <div>Total Latensi Distribusi: <strong>{dijkstra.totalBobot} {dijkstra.totalBobot !== '∞' ? 'ms' : ''}</strong></div>
                 <div style={{ borderTop: '1px solid #edf2f7', marginTop: '6px', paddingTop: '6px' }}>Kombinatorika Alternatif Rute (DFS): <strong style={{ color: '#3182ce' }}>{jumlahJalurAlternatif} Jalur Unik</strong></div>
                 <div>Total Akumulasi Bobot Pohon (MST): <strong>{mst.totalBobotMST} ms</strong></div>
               </div>
