@@ -48,12 +48,10 @@ export default function App() {
   const handleMouseMove = (e) => {
     if (!simpulAktif || !svgRef.current) return;
 
-    // Mendapatkan posisi koordinat mouse relatif terhadap area kotak SVG
     const rect = svgRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Batasi pergeseran agar tidak keluar dari area gambar diagram
     const xTerbatas = Math.max(30, Math.min(rect.width - 30, mouseX));
     const yTerbatas = Math.max(30, Math.min(rect.height - 50, mouseY));
 
@@ -68,14 +66,23 @@ export default function App() {
   };
 
   // =========================================================================
-  // HANDLER AKSI INPUT FORM
+  // HANDLER AKSI INPUT FORM (DENGAN SKEMA KEAMANAN)
   // =========================================================================
   const handleTambahPerangkat = (e) => {
-    e.preventDefault(); // Perbaikan: e.preventDefault() sekarang valid
-    const namaBersih = namaPerangkatBaru.trim().replace(/\s+/g, '_');
-    if (!namaBersih || perangkat[namaBersih]) return;
+    e.preventDefault();
+    // Sanitasi: Hanya izinkan huruf, angka, dan underscore. Hapus simbol berbahaya.
+    const namaBersih = namaPerangkatBaru.trim().replace(/[^a-zA-Z0-9_]/g, '');
+    
+    if (!namaBersih) {
+      alert("Keamanan Input: Nama perangkat tidak boleh kosong atau hanya berisi karakter spesial!");
+      return;
+    }
+    
+    if (perangkat[namaBersih]) {
+      alert("Validasi: Perangkat dengan nama tersebut sudah terdaftar di jaringan!");
+      return;
+    }
 
-    // Default ditaruh di tengah bawah area kerja, lalu bisa di-drag sesuka hati
     setPerangkat(prev => ({
       ...prev,
       [namaBersih]: { tipe: tipePerangkatBaru, x: 250, y: 220 }
@@ -84,24 +91,36 @@ export default function App() {
   };
 
   const handleTambahKoneksi = (e) => {
-    e.preventDefault(); // Perbaikan: e.preventDefault() sekarang valid
-    if (dariNode === keNode) return;
+    e.preventDefault();
+    if (dariNode === keNode) {
+      alert("Validasi Jalur: Perangkat asal dan tujuan tidak boleh sama (Looping Tunggal dilarang)!");
+      return;
+    }
     
+    // Keamanan: Pastikan bobot merupakan bilangan bulat positif (> 0)
+    const bobotAman = Math.round(Number(bobotInput));
+    if (isNaN(bobotAman) || bobotAman <= 0) {
+      alert("Keamanan Algoritma: Bobot latensi harus berupa angka bulat positif (minimal 1 ms) untuk mencegah galat Dijkstra!");
+      return;
+    }
+    
+    // Validasi Duplikasi Dua Arah: Cek rute bolak-balik agar tidak merusak representasi matriks
     const sudahAda = koneksi.some(k => 
       (k.dari === dariNode && k.ke === keNode) || (k.dari === keNode && k.ke === dariNode)
     );
-    if (sudahAda) return;
+    
+    if (sudahAda) {
+      alert(`Validasi Graf: Jalur kabel antara ${dariNode} dan ${keNode} sudah terpasang!`);
+      return;
+    }
 
-    // Menggunakan pembuat ID unik berbasis timestamp agar memicu re-render useMemo secara bersih
     const idBaru = `e_${Date.now()}`;
-    setKoneksi(prev => [...prev, { id: idBaru, dari: dariNode, ke: keNode, bobot: Number(bobotInput) }]);
+    setKoneksi(prev => [...prev, { id: idBaru, dari: dariNode, ke: keNode, bobot: bobotAman }]);
   };
 
   // =========================================================================
   // LOGIKA KOMPUTASI MATEMATIKA DISKRIT
   // =========================================================================
-  
-  // 1 & 2. Adjacency List (Daftar Ketetanggaan)
   const daftarKetetanggaan = useMemo(() => {
     const adj = {};
     simpulList.forEach(node => adj[node] = []);
@@ -114,7 +133,6 @@ export default function App() {
     return adj;
   }, [simpulList, koneksi]);
 
-  // Tahap 2: Matriks Ketetanggaan (Adjacency Matrix Berbobot)
   const matriksKetetanggaan = useMemo(() => {
     const matriks = [];
     simpulList.forEach((dari) => {
@@ -131,7 +149,6 @@ export default function App() {
     return matriks;
   }, [simpulList, koneksi]);
 
-  // Tahap 2: Matriks Bersisian (Incidence Matrix)
   const matriksBersisian = useMemo(() => {
     const matriks = [];
     simpulList.forEach((simpul) => {
@@ -148,7 +165,6 @@ export default function App() {
     return matriks;
   }, [simpulList, koneksi]);
 
-  // Proses 4: Derajat Simpul
   const derajatSimpul = useMemo(() => {
     const derajat = {};
     simpulList.forEach(node => {
@@ -157,7 +173,6 @@ export default function App() {
     return derajat;
   }, [simpulList, daftarKetetanggaan]);
 
-  // Proses 5: Lintasan Terpendek (Algoritma Dijkstra)
   const dijkstra = useMemo(() => {
     if (!perangkat[titikAwal] || !perangkat[titikTujuan]) return { jalur: [], totalBobot: '∞' };
     let jarak = {};
@@ -197,7 +212,6 @@ export default function App() {
     return { jalur: rute, totalBobot: jarak[titikTujuan] };
   }, [simpulList, daftarKetetanggaan, titikAwal, titikTujuan, perangkat]);
 
-  // Proses 6: Pohon Rentang Minimum (Algoritma Prim)
   const mst = useMemo(() => {
     if (simpulList.length === 0) return { sisiMST: [], totalBobotMST: 0 };
     let mstSisi = [];
@@ -225,7 +239,6 @@ export default function App() {
     return { sisiMST: mstSisi, totalBobotMST };
   }, [simpulList, daftarKetetanggaan]);
 
-  // Proses 7: Kombinatorika Rute Jaringan (DFS)
   const jumlahJalurAlternatif = useMemo(() => {
     if (!daftarKetetanggaan[titikAwal] || !daftarKetetanggaan[titikTujuan]) return 0;
     const hitungJalur = (start, target, visited) => {
@@ -368,7 +381,7 @@ export default function App() {
             
             {/* TAHAP 2: MATRIKS */}
             <div>
-              <h3 style={{ color: '#2c5282', marginTop: '0' }}>  Representasi Matriks Hasil Input</h3>
+              <h3 style={{ color: '#2c5282', marginTop: '0' }}>Representasi Matriks Hasil Input</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                 <div style={{ backgroundColor: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                   <h5 style={{ margin: '0 0 5px 0', color: '#4a5568' }}>Matriks Ketetanggaan (Adjacency)</h5>
@@ -408,7 +421,7 @@ export default function App() {
               </table>
             </div>
 
-            {/* ANALISIS PROSES 5, 7, 8 */}
+            {/* ANALISIS PROSES */}
             <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
               <h3 style={{ color: '#2c5282', margin: '0 0 10px 0' }}>Analisis Relasi Jalur & Efisiensi</h3>
               <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
